@@ -28,7 +28,13 @@ export const DEFAULTS = Object.freeze({
   /** search 命中一处时，前后各带几行上下文 */
   searchContext: 3,
   /** 插件自带的每日归纳开关：true = 每天自动跑一次 tend，false = 只认手动调用 */
-  autoTend: true
+  autoTend: true,
+  /**
+   * 往工作空间的 AGENTS.md 里写一小段「记忆在哪、开局先读」的提示。
+   * DSH 会自动把 AGENTS.md 注入上下文，所以这一小段是最省事的「让人知道去读」的办法。
+   * true = 每次用到记忆时同步这段；false = 把这段撤掉。
+   */
+  agentsHint: true
 });
 
 function isPlainObject(value) {

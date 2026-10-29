@@ -129,7 +129,8 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
   "sectionWarn": 30,
   "searchLimit": 8,
   "searchContext": 3,
-  "autoTend": true
+  "autoTend": true,
+  "agentsHint": true
 }
 ```
 
@@ -151,6 +152,23 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 想改这份说明就改 [`src/skill.js`](./src/skill.js)，改完重载插件即生效。
 
 宿主没有 `skills` 服务（或者版本太老）时会安静跳过。那种情况下，把 [`SKILL.md`](./SKILL.md) 的内容贴进 `AGENTS.md` 或系统提示，效果一样。
+
+---
+
+## 会在你的 AGENTS.md 里留一小段
+
+技能只说明「有这么一套东西」，不等于模型开局就会去翻。所以插件还会往工作空间的 `AGENTS.md` 里同步一段几行的提示——记忆在哪儿、开局先读 `MEMORY.md` 和最近两天、翻旧事用 `memory_search`、写回去用 `memory_add`。
+
+DSH 的 `dsh-agent-instructions` 会自动把 `AGENTS.md` 注入上下文（`$DSH_HOME/AGENTS.md` 全局那份，加工作目录那份），所以这段一放进去，接手的模型在**新会话第一次请求**时就会看见。
+
+规矩说清楚：
+
+- 用 `<!-- dsh-memory-tide:begin -->` / `<!-- dsh-memory-tide:end -->` 圈起来，**块外一个字都不改**。
+- 文件不存在就建一个（带 `# AGENTS.md` 标题）；已经有内容就追加在末尾。
+- 内容没变就不写盘。
+- 不想要就在设置页把「往 AGENTS.md 写提示」关掉，或者把 `.tide.json` 里 `agentsHint` 改成 `false`：插件会把那段撤干净，块外原文留着；如果整个文件只剩它当初建的空壳，连文件一起删掉。
+
+顺便说清楚这个机制的脾气：`AGENTS.md` 不是每次请求都重新读盘的，它是在**会话第一次请求**时加载一次，然后作为一条持久消息留在上下文里。会话中途改了它，当前会话不一定看得到（下次文件系统操作到那个目录、或者恢复会话时会重新对账），但**每一次新会话都是最新的**。对这份「一次性写、以后基本不动」的提示来说，够用。
 
 ---
 

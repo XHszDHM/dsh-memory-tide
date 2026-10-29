@@ -27,6 +27,7 @@ import { tendTide, formatTend } from './tend.js';
 import { rememberWorkspace, registerSettingsRpc } from './server.js';
 import { SKILL } from './skill.js';
 import { startDailyTend } from './scheduler.js';
+import { syncAgentsHint } from './agents.js';
 
 export const name = 'dsh-memory-tide';
 export const inject = ['tools'];
@@ -126,12 +127,23 @@ export async function apply(ctx) {
   const prepared = new Set();
   // 顺手记一笔「这个工作空间用过记忆」，设置页的下拉才有的可选。
   const remembered = new Set();
+  // AGENTS.md 那段提示上次是开还是关，开关没变就不用回去读文件。
+  const hinted = new Map();
   const setup = async (root, exec) => {
     const paths = memoryPaths(resolveRoot(rootFor(root, exec)));
     const { config } = await loadFor(paths.root, { createIfMissing: true });
     if (!prepared.has(paths.root)) {
       await ensureScaffold(paths);
       prepared.add(paths.root);
+    }
+    // 往工作空间的 AGENTS.md 里维护一小段「记忆在哪」，DSH 会自动把它注入上下文。
+    // 写不进去（只读目录、权限不够）不算错，工具照常用。
+    const wantHint = config.agentsHint !== false;
+    if (hinted.get(paths.root) !== wantHint) {
+      hinted.set(paths.root, wantHint);
+      await syncAgentsHint(paths.root, wantHint).catch(() => {
+        /* 碰不到 AGENTS.md 不影响记忆本身 */
+      });
     }
     if (!remembered.has(paths.root)) {
       remembered.add(paths.root);
