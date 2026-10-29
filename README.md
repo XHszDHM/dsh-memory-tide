@@ -157,7 +157,7 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 
 ## 会在你的 AGENTS.md 里留一小段
 
-技能只说明「有这么一套东西」，不等于模型开局就会去翻。所以插件还会往工作空间的 `AGENTS.md` 里同步一段几行的提示——记忆在哪儿、开局先读 `MEMORY.md` 和最近两天、翻旧事用 `memory_search`、写回去用 `memory_add`。
+技能只说明「有这么一套东西」，不等于模型开局就会去翻。所以插件还会往工作空间的 `AGENTS.md` 里同步一段几行的提示——记忆在哪儿、开局先读 `MEMORY.md` 和最近两天、翻旧事用 `memory_search`、写回去用 `memory_add`，外加两条最容易忘的：日记小节标题带时间（`## 【14:30 干了什么】`），凭据永远不写进记忆。
 
 DSH 的 `dsh-agent-instructions` 会自动把 `AGENTS.md` 注入上下文（`$DSH_HOME/AGENTS.md` 全局那份，加工作目录那份），所以这段一放进去，接手的模型在**新会话第一次请求**时就会看见。
 
