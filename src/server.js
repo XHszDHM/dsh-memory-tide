@@ -108,29 +108,71 @@ async function requireRoot(value) {
   return target;
 }
 
+/**
+ * DSH 自己记着「有哪些工作空间」——`$DSH_HOME/storages/workspace.json` 的
+ * `tables.workspaces[<id>]` 里每项带 `path` / `title` / `updatedAt`。
+ * 设置页一打开就把它读一遍，用户不用手输路径。
+ *
+ * 这是宿主的内部存储格式，不保证永远不变：解析不出来就返回空数组，
+ * 上层会退回我们自己的 workspaces.json，功能不受影响。
+ */
+async function discoverWorkspaces() {
+  const file = path.join(dshHome(), 'storages', 'workspace.json');
+  let parsed;
+  try {
+    parsed = JSON.parse((await fs.readFile(file, 'utf8')).replace(/^\uFEFF/, ''));
+  } catch {
+    return [];
+  }
+  const table = parsed?.tables?.workspaces;
+  if (table === null || typeof table !== 'object') return [];
+  const found = [];
+  for (const value of Object.values(table)) {
+    if (value === null || typeof value !== 'object') continue;
+    const target = typeof value.path === 'string' ? value.path.trim() : '';
+    if (!target || !path.isAbsolute(target)) continue;
+    found.push({
+      root: canonical(target),
+      title: typeof value.title === 'string' ? value.title.trim() : '',
+      at: typeof value.updatedAt === 'string' ? value.updatedAt : ''
+    });
+  }
+  // 最近动过的排前面
+  found.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  return found;
+}
+
 async function workspaceList(defaultRoot) {
-  const registry = await readRegistry();
+  const [registry, discovered] = await Promise.all([readRegistry(), discoverWorkspaces()]);
   const roots = [];
   const seen = new Set();
-  const push = async (root, at, isDefault) => {
+  const push = async (root, { at = '', isDefault = false, source = 'manual', title = '' } = {}) => {
     const key = canonical(root).toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     const paths = memoryPaths(canonical(root));
+    if (!(await isDirectory(paths.root))) return;
     roots.push({
       root: paths.root,
-      lastUsed: at ?? '',
-      isDefault: isDefault === true,
-      hasMemory: await isDirectory(paths.root),
+      title,
+      source,
+      lastUsed: at,
+      isDefault,
+      hasMemory: await isDirectory(paths.memoryDir),
       hasConfig: await pathExists(paths.configFile)
     });
   };
-  if (typeof defaultRoot === 'string' && defaultRoot.trim() && await isDirectory(defaultRoot)) {
-    await push(defaultRoot, '', true);
+  if (typeof defaultRoot === 'string' && defaultRoot.trim()) {
+    await push(defaultRoot, { isDefault: true, source: 'default' });
+  }
+  for (const item of discovered) {
+    await push(item.root, { at: item.at, source: 'dsh', title: item.title });
   }
   for (const item of registry.roots) {
-    if (await isDirectory(item.root)) await push(item.root, item.at, false);
+    await push(item.root, { at: item.at, source: 'manual' });
   }
+  // 默认的永远排第一，其余保持「最近用过的在前」
+  roots.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
   return { roots };
 }
 
@@ -148,7 +190,7 @@ async function readConfigFor(root) {
     defaults: { ...DEFAULTS },
     configFile: paths.configFile,
     exists: raw !== null,
-    hasMemory: await isDirectory(paths.root)
+    hasMemory: await isDirectory(paths.memoryDir)
   };
 }
 
@@ -168,7 +210,7 @@ async function writeConfigFor(root, patch) {
  * @returns disposer（没注册成也返回一个空函数，调用方不用分支）
  */
 export function registerSettingsRpc(ctx, { defaultRoot } = {}) {
-  const connection = ctx.get?.('connection');
+  const connection = ctx.connection ?? ctx.get?.('connection');
   if (!connection?.fetch?.register) return () => {};
 
   const respond = (rpcId, result) => Response.json({ type: 'server-response', rpcId, result });

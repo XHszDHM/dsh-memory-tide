@@ -323,14 +323,37 @@ export async function apply(ctx) {
   const registered = [search, read, add, indexTool, lintTool, tend, stats]
     .map((tool) => ctx.tools.register(tool));
 
-  // 设置页的端点：拿不到 connection 服务就安静跳过，插件本体照常。
+  /**
+   * 设置页的端点。
+   *
+   * 关键：`connection` 不是 apply 一进来就有的，得等宿主把它撑起来。
+   * 所以不能直接 `ctx.get('connection')`——那时必然是 undefined，端点静默不注册，
+   * 设置页就什么数据都拿不到。这里用 `ctx.inject(['connection'], …)` 挂着等：
+   * 服务就绪才回调，回调传进来的 scope 才拿得到它。
+   * 没有 ctx.inject 的老宿主退回直接试一次，试不成也不影响插件本体。
+   */
+  const startSettings = (scope) => {
+    try {
+      return registerSettingsRpc(scope, { defaultRoot });
+    } catch {
+      return () => {};
+    }
+  };
   let defaultRoot;
   try {
     defaultRoot = ctx.get ? ctx.get('workingDirectory')?.defaultDirectory : undefined;
   } catch {
     defaultRoot = undefined;
   }
-  const stopSettings = registerSettingsRpc(ctx, { defaultRoot });
+
+  let stopSettings;
+  try {
+    stopSettings = typeof ctx.inject === 'function'
+      ? ctx.inject(['connection'], (scope) => startSettings(scope))
+      : startSettings(ctx);
+  } catch {
+    stopSettings = undefined;
+  }
 
   return () => {
     try {

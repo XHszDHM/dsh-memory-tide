@@ -131,7 +131,8 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 
 装好后打开「设置 → 潮汐记忆」，顶部选一个工作空间，下面九个旋钮直接改，点「保存」写回那个工作空间的 `.tide.json`。
 
-- 下拉里是「用过记忆的工作空间」，插件会自己记着（存在 `$DSH_HOME/integrations/dsh-memory-tide/workspaces.json`）；也可以粘一个绝对路径读。
+- 工作空间是**自动列出来的**：一打开就去读 DSH 自己的 `$DSH_HOME/storages/workspace.json`，把你用过的工作空间全摆进下拉，带标题、最近动过的排前面。同时合并插件自己记的那份（`$DSH_HOME/integrations/dsh-memory-tide/workspaces.json`）和当前会话的默认工作空间。
+- 下拉里没有的，往「其它路径」粘一个绝对路径也能读；没被 DSH 记录过的工作空间就靠这条路。
 - 每个工作空间各改各的，互不影响；「恢复默认」只重置当前选中的那一个。
 - 设置页要重启一次 DSH 才会出现——浏览器的 bundle 是启动时收集的。
 
