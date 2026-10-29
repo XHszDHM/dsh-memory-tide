@@ -214,6 +214,34 @@ export async function writeTodo(paths, text) {
   await writeText(paths.todoFile, text);
 }
 
+const MEMORY_TEMPLATE = `# 长期记忆
+
+这里放天天要用、以后一直用得上的东西：人的脾气和规矩、工具怎么用、路径在哪、哪些坑不能再踩。
+近期挂着的事放 TODO.md，今天发生的事用 \`memory_add\` 写成日记。
+
+## 常驻要点
+
+（还空着。想到就往这里补，一条一行。）
+`;
+
+const TODO_TEMPLATE = `# 待办
+
+近期挂着的事都放这一处，做完就删掉。
+
+- 
+`;
+
+/**
+ * 第一次在一个工作空间里用到记忆系统时，把 MEMORY.md / TODO.md 的骨架写出来。
+ * 已经存在的文件一个字都不碰 —— 只补缺的那份。
+ */
+export async function ensureScaffold(paths) {
+  await ensureDirs(paths);
+  if ((await readText(paths.memoryFile)) === null) await writeText(paths.memoryFile, MEMORY_TEMPLATE);
+  if ((await readText(paths.todoFile)) === null) await writeText(paths.todoFile, TODO_TEMPLATE);
+  return paths;
+}
+
 /* ------------------------------------------------------------- 小工具 */
 
 /** 一份记忆里的小节标题（## 开头的行） */

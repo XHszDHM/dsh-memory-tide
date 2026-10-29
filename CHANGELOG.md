@@ -1,5 +1,23 @@
 # 更新日志
 
+## 0.1.1 — 2026-10-29
+
+安装通用性修复。这一版起，插件在任何 DSH 上用任何方式装上都能跑。
+
+**不再依赖宿主内部包**
+- 去掉对 `@deepseek-ai/dsh-tools` 的 `import` 与 `peerDependencies`。旧版靠它的 `defineTool` 打包工具定义，而那条路只在插件以 link/junction 挂在 profile 外时才解析得到（宿主 `dsh-app-boot` 的 `routeLinked` 按 peer 路由）；换成普通目录装进 `profiles/<档名>/node_modules/` 就走 `routeScoped`，profile 依赖表里没有这个包 → 加载失败、插件整条 fiber 挂掉。
+- 现在只对接宿主公开的 `ctx.tools.register()` 契约，参数简写转 JSON Schema 由插件自己做。
+
+**工具定义补齐 `output`**
+- `register()` 要求每个工具声明 `output: { schema, render }`，缺了会抛 `Cannot read properties of undefined (reading 'render')`。七个工具统一补上纯文本输出。
+
+**默认根目录跟着会话走**
+- 不再回落到 `process.cwd()`（宿主进程里那是 profile 目录）。顺序：显式 `root` 参数 → 会话当前工作目录 → 环境变量 → cwd。
+
+**开箱就是能用的**
+- 第一次用到时自动生成 `MEMORY.md` / `TODO.md` 骨架，已存在的文件不碰。
+- 缺必填参数时给一句能读懂的报错，而不是 `undefined` 崩进 `execute`。
+
 ## 0.1.0 — 2026-10-29
 
 第一个能用的版本。

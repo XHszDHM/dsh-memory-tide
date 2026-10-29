@@ -1,7 +1,7 @@
 /**
  * index.js — 潮汐记忆（dsh-memory-tide）的插件入口。
  *
- * 注册六个工具：
+ * 注册七个工具：
  *   memory_search  找东西（默认只翻热档）
  *   memory_read    把某一天整份读出来
  *   memory_add     往某一天追加一段
@@ -18,7 +18,7 @@
 import { resolveRoot, memoryPaths } from './paths.js';
 import { loadFor } from './config.js';
 import {
-  listDays, listAll, readDayAnywhere, appendToDay, today, locateDay
+  listDays, listAll, readDayAnywhere, appendToDay, today, locateDay, ensureScaffold
 } from './store.js';
 import { searchTide } from './search.js';
 import { rebuildIndex } from './index-gen.js';
@@ -28,20 +28,60 @@ import { tendTide, formatTend } from './tend.js';
 export const name = 'dsh-memory-tide';
 export const inject = ['tools'];
 
-async function loadDefineTool() {
-  try {
-    const mod = await import('@deepseek-ai/dsh-tools');
-    if (mod?.defineTool) return mod.defineTool;
-  } catch {
-    /* 落到环境变量 */
+/**
+ * 本插件**不 import 任何 @deepseek-ai/* 包**。
+ *
+ * 早先版本靠 `@deepseek-ai/dsh-tools` 的 `defineTool` 打包工具定义，这套只在
+ * 「插件以 link/junction 方式挂在 profile 外」时才解析得到（宿主 dsh-app-boot 的
+ * routeLinked 会按 peerDependencies 把请求路由进安装包）。换成一个普通 DSH 用
+ * npm/tarball 装进 profile/node_modules 时走的是 routeScoped 那条路，profile 的
+ * 依赖表里没有这个包 → 直接 import 失败 → fiber failed。为了「任何 DSH 装上都能用」，
+ * 这里只依赖宿主公开的 `ctx.tools.register()` 契约，自己把参数简写转成 JSON Schema。
+ */
+
+/** 参数简写 → JSON Schema。字段形如 { type, required?, description, enum? } */
+function toJsonSchema(spec) {
+  const properties = {};
+  const required = [];
+  for (const [key, field] of Object.entries(spec ?? {})) {
+    if (field === null || typeof field !== 'object') {
+      throw new Error(`工具参数 ${key} 的声明必须是对象`);
+    }
+    const { required: isRequired, ...rest } = field;
+    // `json` 是这套简写里的「任意 JSON」，对应 JSON Schema 的「不限定类型」
+    properties[key] = rest.type === 'json'
+      ? (rest.description === undefined ? {} : { description: rest.description })
+      : rest;
+    if (isRequired === true) required.push(key);
   }
-  const override = process.env.DSH_TOOLS_PATH;
-  if (override) {
-    const { pathToFileURL } = await import('node:url');
-    const mod = await import(pathToFileURL(override).href);
-    if (mod?.defineTool) return mod.defineTool;
-  }
-  throw new Error('cannot resolve @deepseek-ai/dsh-tools (set DSH_TOOLS_PATH for local dev)');
+  const schema = { type: 'object', properties };
+  if (required.length > 0) schema.required = required;
+  return schema;
+}
+
+/**
+ * 组装一份 tools.register() 认得的定义：{ name, description, parameters, output, execute }。
+ * 顺手在进入 execute 之前挡掉缺必填参数的调用，给出比 undefined 崩掉更好读的错。
+ */
+function makeTool(options) {
+  const parameters = toJsonSchema(options.parameters);
+  const requiredNames = parameters.required ?? [];
+  return {
+    name: options.name,
+    description: options.description,
+    parameters,
+    output: options.output,
+    async execute(args, exec) {
+      const input = (args !== null && typeof args === 'object') ? args : {};
+      for (const key of requiredNames) {
+        const value = input[key];
+        if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+          throw new Error(`${options.name}：缺少必填参数 ${key}`);
+        }
+      }
+      return options.execute(input, exec);
+    }
+  };
 }
 
 const ROOT_PARAM = {
@@ -49,16 +89,49 @@ const ROOT_PARAM = {
   description: '记忆所在的根目录。留空就用当前工作空间。'
 };
 
-export async function apply(ctx) {
-  const defineTool = await loadDefineTool();
+// 本插件的工具都返回一段纯文本：schema 声明为 string，render 拼成一个 text 块。
+const TEXT_OUTPUT = {
+  schema: { type: 'string' },
+  render(_args, value) {
+    return [{ type: 'text', text: String(value ?? '') }];
+  }
+};
 
-  const setup = async (root) => {
-    const paths = memoryPaths(resolveRoot(root));
+export async function apply(ctx) {
+  // 没显式给 root 时，跟着会话的当前工作目录走（没有这个服务才退回环境变量 / cwd）。
+  const rootFor = (explicit, exec) => {
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+    let dirs;
+    try {
+      dirs = ctx.get ? ctx.get('workingDirectory') : undefined;
+    } catch {
+      dirs = undefined;
+    }
+    const session = exec && exec.agent && exec.agent.session;
+    if (dirs && session) {
+      try {
+        const dir = dirs.get(session);
+        if (typeof dir === 'string' && dir.trim()) return dir.trim();
+      } catch {
+        /* 服务没准备好就往下退 */
+      }
+    }
+    return undefined;
+  };
+
+  // 每个工作空间只铺一次骨架（MEMORY.md / TODO.md），已存在的文件不碰。
+  const prepared = new Set();
+  const setup = async (root, exec) => {
+    const paths = memoryPaths(resolveRoot(rootFor(root, exec)));
     const { config } = await loadFor(paths.root, { createIfMissing: true });
+    if (!prepared.has(paths.root)) {
+      await ensureScaffold(paths);
+      prepared.add(paths.root);
+    }
     return { paths, config };
   };
 
-  const search = defineTool({
+  const search = makeTool({
     name: 'memory_search',
     description: [
       '在潮汐记忆里找东西。默认只翻**热档**（近 7 天 + 被查得多被钉住的那些天），也搜 MEMORY.md 和 TODO.md。',
@@ -85,8 +158,9 @@ export async function apply(ctx) {
       context: { type: 'integer', description: '每处命中带几行上下文，默认 3' },
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths, config } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths, config } = await setup(args.root, exec);
       const result = await searchTide(paths, {
         query: args.query,
         scope: args.scope ?? 'hot',
@@ -98,7 +172,7 @@ export async function apply(ctx) {
     }
   });
 
-  const read = defineTool({
+  const read = makeTool({
     name: 'memory_read',
     description: [
       '把某一天的记忆整份读出来。不传 day 就读今天。',
@@ -108,8 +182,9 @@ export async function apply(ctx) {
       day: { type: 'string', description: 'YYYY-MM-DD，留空是今天' },
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths } = await setup(args.root, exec);
       const day = args.day ?? today();
       const { tier, text } = await readDayAnywhere(paths, day);
       if (text === null) return `${day} 这一天还没有记忆`;
@@ -117,7 +192,7 @@ export async function apply(ctx) {
     }
   });
 
-  const add = defineTool({
+  const add = makeTool({
     name: 'memory_add',
     description: [
       '往某一天追加一段。不传 day 就写今天、不传 tier 默认写热档。',
@@ -131,8 +206,9 @@ export async function apply(ctx) {
       day: { type: 'string', description: 'YYYY-MM-DD，默认今天' },
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths } = await setup(args.root, exec);
       const day = args.day ?? today();
       const result = await appendToDay(paths, day, args.body, { section: args.section });
       const tier = (await locateDay(paths, day)) ?? result.tier;
@@ -141,7 +217,7 @@ export async function apply(ctx) {
     }
   });
 
-  const indexTool = defineTool({
+  const indexTool = makeTool({
     name: 'memory_index',
     description: [
       '重建索引。热档索引（每次必读、要短）和冷档索引（翻旧账才读）分开生成。',
@@ -151,8 +227,9 @@ export async function apply(ctx) {
       tier: { type: 'string', enum: ['hot', 'cold', 'both'], description: '默认 both' },
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths } = await setup(args.root, exec);
       const which = args.tier ?? 'both';
       const out = [];
       const tiers = which === 'both' ? ['hot', 'cold'] : [which];
@@ -165,7 +242,7 @@ export async function apply(ctx) {
     }
   });
 
-  const lintTool = defineTool({
+  const lintTool = makeTool({
     name: 'memory_lint',
     description: [
       '体检，只看不改。挑这些毛病：',
@@ -175,14 +252,15 @@ export async function apply(ctx) {
     parameters: {
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths, config } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths, config } = await setup(args.root, exec);
       const report = await lintTide(paths, config);
       return formatLint(report);
     }
   });
 
-  const tend = defineTool({
+  const tend = makeTool({
     name: 'memory_tend',
     description: [
       '冷热档归纳，每天跑一次就行。规则：',
@@ -198,21 +276,23 @@ export async function apply(ctx) {
       dryRun: { type: 'boolean', description: '只出报告，不动文件' },
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths, config } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths, config } = await setup(args.root, exec);
       const report = await tendTide(paths, config, { dryRun: args.dryRun === true });
       return formatTend(report);
     }
   });
 
-  const stats = defineTool({
+  const stats = makeTool({
     name: 'memory_stats',
     description: '看一眼记忆系统现在的样子：热档几天、冷档几天、各被查过几次、配置文件在哪。',
     parameters: {
       root: ROOT_PARAM
     },
-    async execute(args) {
-      const { paths, config } = await setup(args.root);
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const { paths, config } = await setup(args.root, exec);
       const all = await listAll(paths);
       const hot = all.filter((item) => item.tier === 'hot');
       const cold = all.filter((item) => item.tier === 'cold');
