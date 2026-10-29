@@ -24,6 +24,7 @@ import { searchTide } from './search.js';
 import { rebuildIndex } from './index-gen.js';
 import { lintTide, formatLint } from './lint.js';
 import { tendTide, formatTend } from './tend.js';
+import { rememberWorkspace, registerSettingsRpc } from './server.js';
 
 export const name = 'dsh-memory-tide';
 export const inject = ['tools'];
@@ -121,12 +122,20 @@ export async function apply(ctx) {
 
   // 每个工作空间只铺一次骨架（MEMORY.md / TODO.md），已存在的文件不碰。
   const prepared = new Set();
+  // 顺手记一笔「这个工作空间用过记忆」，设置页的下拉才有的可选。
+  const remembered = new Set();
   const setup = async (root, exec) => {
     const paths = memoryPaths(resolveRoot(rootFor(root, exec)));
     const { config } = await loadFor(paths.root, { createIfMissing: true });
     if (!prepared.has(paths.root)) {
       await ensureScaffold(paths);
       prepared.add(paths.root);
+    }
+    if (!remembered.has(paths.root)) {
+      remembered.add(paths.root);
+      rememberWorkspace(paths.root).catch(() => {
+        /* 记不下来不影响用 */
+      });
     }
     return { paths, config };
   };
@@ -313,7 +322,22 @@ export async function apply(ctx) {
 
   const registered = [search, read, add, indexTool, lintTool, tend, stats]
     .map((tool) => ctx.tools.register(tool));
+
+  // 设置页的端点：拿不到 connection 服务就安静跳过，插件本体照常。
+  let defaultRoot;
+  try {
+    defaultRoot = ctx.get ? ctx.get('workingDirectory')?.defaultDirectory : undefined;
+  } catch {
+    defaultRoot = undefined;
+  }
+  const stopSettings = registerSettingsRpc(ctx, { defaultRoot });
+
   return () => {
+    try {
+      stopSettings?.();
+    } catch {
+      /* 忽略 */
+    }
     for (const dispose of registered) {
       try {
         dispose?.();

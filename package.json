@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory-tide",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Tide memory for DeepSeek Harness: daily notes kept in a hot/cold archive with an index each, so the agent always has a small, hot index in context and can still reach months back. 潮汐记忆：每天一份记忆，按调用频率在热档与冷档之间升降，热档索引常驻、冷档索引按需翻。",
   "keywords": [
     "dsh",
@@ -26,12 +26,14 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
+    "./client": "./lib/client.js",
     "./paths": "./src/paths.js",
     "./config": "./src/config.js",
     "./store": "./src/store.js"
   },
   "files": [
     "src",
+    "lib",
     "cordis.patch.yml",
     "dsh.plugin.json",
     "README.md",
@@ -50,6 +52,15 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
     }
   }
 }
