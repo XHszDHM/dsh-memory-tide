@@ -25,6 +25,7 @@ import { rebuildIndex } from './index-gen.js';
 import { lintTide, formatLint } from './lint.js';
 import { tendTide, formatTend } from './tend.js';
 import { rememberWorkspace, registerSettingsRpc } from './server.js';
+import { SKILL } from './skill.js';
 
 export const name = 'dsh-memory-tide';
 export const inject = ['tools'];
@@ -324,6 +325,36 @@ export async function apply(ctx) {
     .map((tool) => ctx.tools.register(tool));
 
   /**
+   * 技能：教接手的 AI「什么时候翻记忆、日记怎么写、收尾做什么」。
+   *
+   * 光有工具不够 —— 工具描述只说明单个工具干什么，那套流程传不过去，
+   * 装插件的人还得自己往人设里抄一遍规矩。登记成技能之后，
+   * 任何 AI 在技能目录里就能看到，不用额外配置。
+   *
+   * `skills` 服务不是每个宿主版本都有（没有就安静跳过）；
+   * 有的话它也不一定在 apply 一进来就绪，所以和 connection 一样用 inject 等着。
+   */
+  const startSkills = (scope) => {
+    const skills = scope.skills ?? scope.get?.('skills');
+    if (skills === undefined || typeof skills.register !== 'function') return () => {};
+    try {
+      const dispose = skills.register({ ...SKILL });
+      return typeof dispose === 'function' ? dispose : () => {};
+    } catch {
+      return () => {};
+    }
+  };
+
+  let stopSkills;
+  try {
+    stopSkills = typeof ctx.inject === 'function'
+      ? ctx.inject(['skills'], (scope) => startSkills(scope))
+      : startSkills(ctx);
+  } catch {
+    stopSkills = undefined;
+  }
+
+  /**
    * 设置页的端点。
    *
    * 关键：`connection` 不是 apply 一进来就有的，得等宿主把它撑起来。
@@ -358,6 +389,11 @@ export async function apply(ctx) {
   return () => {
     try {
       stopSettings?.();
+    } catch {
+      /* 忽略 */
+    }
+    try {
+      stopSkills?.();
     } catch {
       /* 忽略 */
     }

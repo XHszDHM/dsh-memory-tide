@@ -140,7 +140,11 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 
 ## 给 AI 看的那份
 
-插件包里带了 [`SKILL.md`](./SKILL.md)——写的是「什么时候该用哪个工具、翻旧事的三步、什么该写进哪一层」。把那个文件的内容贴进 `AGENTS.md` 或系统提示，AI 就知道怎么用它了。
+**不用自己抄。** 插件启动时会用 `ctx.get('skills').register()` 把一份叫 `tide-memory` 的技能登记到宿主的技能目录里，模型在什么时候该读它写得清清楚楚——什么时候翻记忆、翻旧事的三步、日记小节带时间、每天收尾跑 `memory_tend`、七个工具各干什么。
+
+想改这份说明就改 [`src/skill.js`](./src/skill.js)，改完重载插件即生效。
+
+宿主没有 `skills` 服务（或者版本太老）时会安静跳过。那种情况下，把 [`SKILL.md`](./SKILL.md) 的内容贴进 `AGENTS.md` 或系统提示，效果一样。
 
 ---
 
