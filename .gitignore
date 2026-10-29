@@ -1,0 +1,7 @@
+node_modules/
+*.log
+
+# 每个人本地的状态，不进仓库
+memory/
+.tide.json
+.usage.json
