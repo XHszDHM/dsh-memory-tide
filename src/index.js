@@ -26,6 +26,7 @@ import { lintTide, formatLint } from './lint.js';
 import { tendTide, formatTend } from './tend.js';
 import { rememberWorkspace, registerSettingsRpc } from './server.js';
 import { SKILL } from './skill.js';
+import { startDailyTend } from './scheduler.js';
 
 export const name = 'dsh-memory-tide';
 export const inject = ['tools'];
@@ -386,7 +387,26 @@ export async function apply(ctx) {
     stopSettings = undefined;
   }
 
+  /**
+   * 每日自动归纳。
+   *
+   * 没有它的话，`memory_tend` 只是「一个存在但没人调的工具」——
+   * 装插件的人不可能天天记得喊一句，热档就一直堆着不到冷档去。
+   * 定时器在这里挂着，每个用过记忆的工作空间一天归纳一次。
+   */
+  let stopTend;
+  try {
+    stopTend = startDailyTend(ctx, { getDefaultRoot: () => defaultRoot });
+  } catch {
+    stopTend = undefined;
+  }
+
   return () => {
+    try {
+      stopTend?.();
+    } catch {
+      /* 忽略 */
+    }
     try {
       stopSettings?.();
     } catch {

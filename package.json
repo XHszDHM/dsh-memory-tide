@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory-tide",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Tide memory for DeepSeek Harness: daily notes kept in a hot/cold archive with an index each, so the agent always has a small, hot index in context and can still reach months back. 潮汐记忆：每天一份记忆，按调用频率在热档与冷档之间升降，热档索引常驻、冷档索引按需翻。",
   "keywords": [
     "dsh",

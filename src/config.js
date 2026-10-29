@@ -26,7 +26,9 @@ export const DEFAULTS = Object.freeze({
   /** search 默认返回几处命中 */
   searchLimit: 8,
   /** search 命中一处时，前后各带几行上下文 */
-  searchContext: 3
+  searchContext: 3,
+  /** 插件自带的每日归纳开关：true = 每天自动跑一次 tend，false = 只认手动调用 */
+  autoTend: true
 });
 
 function isPlainObject(value) {

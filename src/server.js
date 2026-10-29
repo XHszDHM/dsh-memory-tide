@@ -30,7 +30,7 @@ function dshHome() {
   return path.join(os.homedir(), '.dsh');
 }
 
-function dataDirectory() {
+export function dataDirectory() {
   return path.join(dshHome(), 'integrations', 'dsh-memory-tide');
 }
 
@@ -48,7 +48,7 @@ function samePath(a, b) {
   return canonical(a).toLowerCase() === canonical(b).toLowerCase();
 }
 
-async function readRegistry() {
+export async function readRegistry() {
   try {
     const text = await fs.readFile(registryFile(), 'utf8');
     const parsed = JSON.parse(text.replace(/^\uFEFF/, ''));

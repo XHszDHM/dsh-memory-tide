@@ -101,11 +101,16 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 
 ## 每天跑一次
 
-归纳不用你记着，交给定时任务：
+不用你记着，插件自己带了个定时器。
 
-```
-每天跑一次 memory_tend。跑完如果搬动过什么，就在当天日记里记一句。
-```
+- 每半小时醒一次，看今天跑过没有；每个用过记忆的工作空间，**一天自动归纳一次**。
+- 状态记在 `$DSH_HOME/integrations/dsh-memory-tide/tend-state.json`，重启不会重跑同一天，也不会漏掉当天。
+- 只归纳已经有 `memory/` 目录的工作空间 —— 没记忆的地方不会被凭空造出目录。
+- 单个工作空间出错不影响别人，定时器也不会因为一次异常就死掉。
+
+想关掉，把那个工作空间 `memory/.tide.json` 里的 `autoTend` 改成 `false`，之后只认手动调用 `memory_tend`。
+
+手动调也行：`memory_tend` 就是归纳工具，`dryRun: true` 只看报告、不动文件。
 
 ---
 
@@ -123,7 +128,8 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
   "hotMaxFiles": 0,
   "sectionWarn": 30,
   "searchLimit": 8,
-  "searchContext": 3
+  "searchContext": 3,
+  "autoTend": true
 }
 ```
 
