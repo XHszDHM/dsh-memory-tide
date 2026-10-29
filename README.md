@@ -75,7 +75,7 @@ dsh plugin --profile desktop add link:D:/path/to/dsh-memory-tide
 
 插件本身**不依赖任何 `@deepseek-ai/*` 包**——只用到宿主的 `ctx.tools.register()` 公开契约，参数 schema 是插件自己转出来的 JSON Schema。所以不管你是 `link:` 挂开发目录、还是 `npm`/`github:` 装进 `profiles/<档名>/node_modules/`，跑起来是同一份代码，不会因为宿主内部包解析不到而加载失败。
 
-第一次在某个工作空间调用任意工具时，会在 `<工作空间>/memory/` 下自动铺好目录、默认配置、`MEMORY.md` 和 `TODO.md` 的骨架。已有的文件一个字都不动。
+第一次在某个工作空间调用任意工具时，会在 `<工作空间>/memory/` 下自动铺好目录、默认配置、`MEMORY.md` 和 `TODO.md` 的骨架。`MEMORY.md` 的骨架是带说明的——每一节装什么、为什么越短越好、哪些东西不该放这儿，打开就能照着填。已有的文件一个字都不动。
 
 ---
 
